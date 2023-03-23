@@ -132,6 +132,7 @@ ENV/
 env.bak/
 venv.bak/
 venv
+.envrc
 
 # Spyder project settings
 .spyderproject
@@ -175,4 +176,6 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
-nn
+
+# do not commit the inventory files because they are generated upon container startup
+inventory/*

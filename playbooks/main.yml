@@ -1,0 +1,81 @@
+---
+- name: 'Reboot the Kubernetes worker nodes'
+  hosts: all
+  serial: '{{ max_number_of_parallel_jobs }}'
+  remote_user: root
+  vars_files:
+    - ../vars/main.yml
+  tasks:
+    - name: 'Check that the parameters used are not dangerous'
+      ansible.builtin.fail:
+        msg: 'You are about to have a potentially destructive impact on production. Please make sure you have set the correct parameters.'
+      when: (max_number_of_parallel_jobs > '1') and (reboot_server == '1' or drain_node == '1' or kill_containers == '1')
+
+    - name: 'Drain the node'
+      kubernetes.core.k8s_drain:
+        name: '{{ inventory_hostname }}'
+        state: drain
+        delete_options:
+          delete_emptydir_data: true
+          force: true
+          ignore_daemonsets: true
+          wait_timeout: 30
+      delegate_to: localhost
+      when: drain_node == '1'
+
+    - name: 'List all containers on running on the machine'
+      ansible.builtin.shell: 'docker ps -aq'
+      register: docker_ps
+      failed_when: false
+      changed_when: false
+      when: kill_containers == '1'
+
+    - name: 'Remove all containers'
+      community.docker.docker_container:
+        name: '{{ item }}'
+        state: absent
+      loop: '{{ docker_ps.stdout_lines }}'
+      failed_when: false
+      when: kill_containers == '1'
+
+    - name: 'List all images on the machine'
+      ansible.builtin.shell: 'docker images -aq'
+      register: docker_images
+      failed_when: false
+      changed_when: false
+      when: remove_images == '1'
+
+    - name: 'Remove all images'
+      community.docker.docker_image:
+        name: '{{ item }}'
+        state: absent
+      loop: '{{ docker_images.stdout_lines }}'
+      failed_when: false
+      when: remove_images == '1'
+
+    - name: 'Reboot the node'
+      ansible.builtin.reboot:
+        reboot_timeout: 1200
+      when: reboot_server == '1'
+
+    - name: 'Uncordon the node'
+      kubernetes.core.k8s_drain:
+        name: '{{ inventory_hostname }}'
+        state: uncordon
+      delegate_to: localhost
+      when: drain_node == '1'
+
+    - name: 'Wait for the node to be ready'
+      kubernetes.core.k8s_info:
+        kind: Node
+        name: '{{ inventory_hostname }}'
+      register: node_info
+      until: node_info.resources[0].status.conditions | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | count == 1
+      retries: 60
+      delay: 10
+      delegate_to: localhost
+
+    - name: 'Take a break to allow ceph to settle'
+      ansible.builtin.pause:
+        seconds: 300
+      when: max_number_of_parallel_jobs == '1'

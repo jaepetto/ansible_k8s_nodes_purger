@@ -1,0 +1,5 @@
+drain_node: "{{ lookup('ansible.builtin.env', 'DRAIN_NODE', default='0') }}"
+kill_containers: "{{ lookup('ansible.builtin.env', 'KILL_CONTAINERS', default='0') }}"
+reboot_server: "{{ lookup('ansible.builtin.env', 'REBOOT_SERVER', default='0') }}"
+remove_images: "{{ lookup('ansible.builtin.env', 'REMOVE_IMAGES', default='1') }}"
+max_number_of_parallel_jobs: "{{ lookup('ansible.builtin.env', 'MAX_NUMBER_OF_PARALLEL_JOBS', default='1') }}"
